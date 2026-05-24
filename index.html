@@ -111,6 +111,7 @@ body {
 }
 .page { display: none; }
 .page.active { display: block; animation: fadeIn 0.5s ease; }
+#pageGame { position: relative; }
 
 @keyframes fadeIn { from { opacity: 0; transform: translateY(20px); } to { opacity: 1; transform: translateY(0); } }
 @keyframes bounceIn { 0% { transform: scale(0.3); opacity:0; } 50% { transform: scale(1.1); } 70% { transform: scale(0.9); } 100% { transform: scale(1); opacity:1; } }
@@ -258,8 +259,36 @@ body {
 
 .game-question-count { font-size: 16px; color: var(--text-light); white-space: nowrap; }
 
-.game-hero {
-  text-align: center; font-size: 72px; margin: 10px 0; animation: bounceIn 0.6s ease;
+.game-hero-area {
+  text-align: center; margin: 8px 0; display: flex; align-items: center; justify-content: center;
+  gap: 12px; animation: bounceIn 0.6s ease;
+}
+.hero-main { font-size: 64px; transition: all 0.3s; }
+.hero-side { font-size: 36px; opacity: 0.7; transition: all 0.3s; }
+/* 字母对应物品图示 */
+.letter-object {
+  text-align: center; font-size: 64px; margin: 8px 0; animation: bounceIn 0.5s ease;
+}
+/* 浮动装饰粒子（答题时） */
+.game-particles {
+  position: absolute; inset: 0; pointer-events: none; z-index: 0; overflow: hidden;
+}
+.game-particle {
+  position: absolute; font-size: 24px; opacity: 0.3; animation: floatAround 8s ease-in-out infinite;
+}
+@keyframes floatAround {
+  0% { transform: translate(0,0) rotate(0deg); }
+  25% { transform: translate(20px,-30px) rotate(90deg); }
+  50% { transform: translate(50px,10px) rotate(180deg); }
+  75% { transform: translate(20px,30px) rotate(270deg); }
+  100% { transform: translate(0,0) rotate(360deg); }
+}
+
+@media (min-width: 768px) {
+  .hero-main { font-size: 80px; }
+  .hero-side { font-size: 48px; }
+  .letter-object { font-size: 80px; }
+  .game-particle { font-size: 32px; }
 }
 .game-question {
   text-align: center; font-size: 80px; font-weight: 900; color: var(--text-dark);
@@ -547,6 +576,25 @@ const WORLDS = [
 
 const COUNTING_ITEMS = ['⭐','🌟','🪐','🌍','☄️','🌙','🛸','💫','✨','🚀'];
 
+// ========= 主题元素池 =========
+const SPACE_ELEMENTS = ['🚀','🛸','🪐','🌍','⭐','👨‍🚀','☄️','🌙','🛰️','🌠','🔭','💫','🛸','👾'];
+const OCEAN_ELEMENTS = ['🐬','🐋','🐠','🦈','🐙','🐚','🦀','🐳','🐡','🦭','🌊','⛵','🦑','🐟','🪸'];
+const MEADOW_ELEMENTS = ['🐴','🌸','🦋','🌿','🐮','🌾','🐑','🍀','🌻','🐝','🌳','🐰','🌷','🐣','🌈'];
+
+const WORLD_ELEMENTS = {
+  numbers: SPACE_ELEMENTS,
+  letters: OCEAN_ELEMENTS,
+  pinyin: MEADOW_ELEMENTS
+};
+
+// 字母配图：每个大写字母对应的物品emoji
+const LETTER_OBJECTS = {
+  'A':'🍎','B':'🐝','C':'🐱','D':'🐶','E':'🥚','F':'🐟','G':'🍇',
+  'H':'🏠','I':'🍦','J':'🫙','K':'🪁','L':'🦁','M':'🐵','N':'🪺',
+  'O':'🐙','P':'🐷','Q':'👸','R':'🐰','S':'⭐','T':'🐯',
+  'U':'☂️','V':'🎻','W':'🐋','X':'❎','Y':'🪀','Z':'🦓'
+};
+
 // ========= 存储 =========
 const STORAGE_KEY = 'baby_learning_game_v1';
 
@@ -741,9 +789,34 @@ function renderGameQuestion() {
   const progressPct = Math.round((currentQuestionIdx / totalQ) * 100);
   const progressClass = `progress-world${currentWorld + 1}`;
 
+  // 随机主题英雄（每次出题换一批）
+  const pool = WORLD_ELEMENTS[world.id] || [world.animal];
+  const heroMain = pool[Math.floor(Math.random() * pool.length)];
+  const heroSide1 = pool[Math.floor(Math.random() * pool.length)];
+  const heroSide2 = pool[Math.floor(Math.random() * pool.length)];
+
+  // 题目主题装饰
+  let questionDecor = '';
+  if (world.id === 'letters') {
+    // 字母关：显示该字母对应的物品
+    const letter = qData.correct || (qData.display && qData.display !== '🔊' ? qData.display : '');
+    if (letter && LETTER_OBJECTS[letter.toUpperCase()]) {
+      questionDecor = `<div class="letter-object">${LETTER_OBJECTS[letter.toUpperCase()]}</div>`;
+    }
+  } else if (world.id === 'numbers' && (level.type === 'recognition' || level.type === 'matching')) {
+    // 数字关：显示对应数量的太空元素
+    const num = parseInt(qData.correct || qData.display) || 0;
+    if (num > 0 && num <= 10) {
+      const items = [];
+      for (let i = 0; i < num; i++) {
+        items.push(pool[Math.floor(Math.random() * pool.length)]);
+      }
+      questionDecor = `<div class="counting-objects">${items.map(it => `<span class="counting-obj">${it}</span>`).join('')}</div>`;
+    }
+  }
+
   let optionsHTML = '';
   if (level.type === 'ordering') {
-    // 排序模式：每个数字下方展示对应数量的星星
     optionsHTML = qData.options.map((opt, oi) => {
       const num = typeof opt === 'number' ? opt : parseInt(opt) || 1;
       const stars = '⭐'.repeat(Math.min(num, 99));
@@ -767,12 +840,33 @@ function renderGameQuestion() {
       </div>
       <div class="game-question-count">${currentQuestionIdx + 1}/${totalQ}</div>
     </div>
-    <div class="game-hero">${world.animal}</div>
+    <div class="game-hero-area">
+      <span class="hero-side">${heroSide1}</span>
+      <span class="hero-main">${heroMain}</span>
+      <span class="hero-side">${heroSide2}</span>
+    </div>
     ${qData.prompt ? `<div class="game-instruction">${qData.prompt}</div>` : ''}
     ${qData.showObjects ? `<div class="counting-objects">${qData.showObjects}</div>` : ''}
+    ${questionDecor}
     <div class="game-question${qData.smallText ? ' small-text' : ''}">${qData.display || qData.question}</div>
     <div class="game-options">${optionsHTML}</div>
   `;
+
+  // 添加浮动主题粒子
+  const particleEl = document.createElement('div');
+  particleEl.className = 'game-particles';
+  const particleEmojis = WORLD_ELEMENTS[world.id] || ['✨'];
+  for (let i = 0; i < 6; i++) {
+    const p = document.createElement('span');
+    p.className = 'game-particle';
+    p.textContent = particleEmojis[Math.floor(Math.random() * particleEmojis.length)];
+    p.style.left = (5 + Math.random() * 85) + '%';
+    p.style.top = (10 + Math.random() * 80) + '%';
+    p.style.animationDuration = (6 + Math.random() * 8) + 's';
+    p.style.animationDelay = Math.random() * 4 + 's';
+    particleEl.appendChild(p);
+  }
+  container.appendChild(particleEl);
 
   // 语音朗读题目
   setTimeout(() => {
@@ -856,7 +950,7 @@ function genCounting(level) {
   const [min, max] = level.data.range;
   const count = min + Math.floor(Math.random() * (max - min + 1));
   const item = COUNTING_ITEMS[Math.floor(Math.random() * COUNTING_ITEMS.length)];
-  const objects = Array(count).fill(item).join(' ');
+  const objects = Array.from({length: count}, (_, i) => `<span class="counting-obj">${item}</span>`).join('');
   const correct = count;
   const pool = rangeToArray(level.data.range[0], level.data.range[1]);
   const options = genOptions(correct, pool, level.opts);
