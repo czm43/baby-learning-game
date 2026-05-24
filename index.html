@@ -290,11 +290,31 @@ body {
 .game-option.correct-pick { border-color: var(--correct); background: #E8F5E9; animation: bounceIn 0.4s ease; }
 .game-option.wrong-pick { border-color: var(--wrong); background: #FFF3E0; animation: shake 0.5s ease; }
 
+/* 排序按钮 - 数字+星星层叠 */
+.ordering-btn {
+  flex-direction: column; padding: 12px 16px; min-height: 130px; gap: 4px;
+}
+.order-num { font-size: 42px; font-weight: 900; line-height: 1.1; }
+.order-stars { font-size: 18px; line-height: 1.2; opacity: 0.8; white-space: nowrap; }
+@media (min-width: 768px) {
+  .order-num { font-size: 52px; }
+  .order-stars { font-size: 22px; }
+  .ordering-btn { min-height: 150px; }
+}
+
 /* 计数游戏专用 */
 .counting-objects {
-  display: flex; justify-content: center; gap: 12px; margin: 12px 0; flex-wrap: wrap;
+  display: flex; justify-content: center; gap: 10px; margin: 12px 0; flex-wrap: wrap;
 }
-.counting-obj { font-size: 52px; transition: all 0.3s; }
+.counting-obj { font-size: 64px; transition: all 0.3s; }
+
+/* 平板计数元素放大 */
+@media (min-width: 768px) {
+  .counting-obj { font-size: 90px; }
+}
+@media (max-width: 767px) {
+  .counting-obj { font-size: 56px; }
+}
 
 /* ===================== 庆祝动画 ===================== */
 .celebration-overlay {
@@ -505,7 +525,7 @@ const WORLDS = [
   },
   {
     id: 'letters', name: '字母海洋', sub: '认识字母 A-Z', animal: '🐬', color: '#2196F3',
-    unlocked: false, levels: [
+    unlocked: true, levels: [
       { id:'2-1', name:'字母初识', type:'recognition', icon:'👀', desc:'A-E 字母识别', data:{range:['A','E']}, numQ:6, opts:3 },
       { id:'2-2', name:'字母进阶', type:'matching', icon:'🔗', desc:'A-M 字母配对', data:{range:['A','M']}, numQ:6, opts:4 },
       { id:'2-3', name:'字母全掌握', type:'recognition', icon:'🌟', desc:'A-Z 大挑战', data:{range:['A','Z']}, numQ:8, opts:4 },
@@ -515,7 +535,7 @@ const WORLDS = [
   },
   {
     id: 'pinyin', name: '拼音草原', sub: '认识拼音基础', animal: '🐴', color: '#FF9800',
-    unlocked: false, levels: [
+    unlocked: true, levels: [
       { id:'3-1', name:'声母初体验', type:'recognition', icon:'👀', desc:'b p m f', data:{items:['b','p','m','f']}, numQ:6, opts:4 },
       { id:'3-2', name:'更多声母', type:'recognition', icon:'🎵', desc:'d t n l', data:{items:['d','t','n','l']}, numQ:6, opts:4 },
       { id:'3-3', name:'韵母学习', type:'recognition', icon:'🎶', desc:'a o e i u', data:{items:['a','o','e','i','u']}, numQ:6, opts:4 },
@@ -578,10 +598,9 @@ function isLevelUnlocked(worldId, levelIdx) {
   return isLevelCompleted(worldId, levelIdx - 1);
 }
 
-// 解锁世界：太空数字站总是解锁；后续世界前一个世界完成才解锁
+// 解锁世界：所有世界都可自由进入
 function isWorldUnlocked(worldIdx) {
-  if (worldIdx === 0) return true;
-  return isWorldCompleted(WORLDS[worldIdx - 1].id);
+  return true;
 }
 
 function getLevelStarsEarned(worldId, levelIdx) {
@@ -724,10 +743,15 @@ function renderGameQuestion() {
 
   let optionsHTML = '';
   if (level.type === 'ordering') {
-    // 排序模式特殊处理：显示可选数字池
-    optionsHTML = qData.options.map((opt, oi) => `
-      <button class="game-option btn-big" data-index="${oi}" onclick="handleAnswer('${escapeHtml(String(opt))}')">${opt}</button>
-    `).join('');
+    // 排序模式：每个数字下方展示对应数量的星星
+    optionsHTML = qData.options.map((opt, oi) => {
+      const num = typeof opt === 'number' ? opt : parseInt(opt) || 1;
+      const stars = '⭐'.repeat(Math.min(num, 99));
+      return `<button class="game-option btn-big ordering-btn" data-index="${oi}" onclick="handleOrderBtn(this, '${escapeHtml(String(opt))}')">
+        <span class="order-num">${opt}</span>
+        <span class="order-stars">${stars}</span>
+      </button>`;
+    }).join('');
   } else {
     optionsHTML = qData.options.map(opt => `
       <button class="game-option btn-big" onclick="handleAnswer('${escapeHtml(String(opt))}')">${opt}</button>
@@ -906,6 +930,11 @@ function genReading(level) {
 // ========= 答题处理 =========
 let orderingAnswers = [];
 
+// 排序按钮点击：提取数字再调用 handleAnswer
+function handleOrderBtn(btn, answer) {
+  handleAnswer(answer);
+}
+
 function handleAnswer(answer) {
   if (isAnswering) return;
   const world = WORLDS[currentWorld];
@@ -955,10 +984,11 @@ function handleOrderingAnswer(answer) {
   const qData = currentQuestionData;
   orderingAnswers.push(answer);
 
-  // 高亮已选按钮
-  const buttons = document.querySelectorAll('.game-option');
+  // 高亮已选按钮（通过 .order-num span 匹配数字）
+  const buttons = document.querySelectorAll('.ordering-btn');
   buttons.forEach(b => {
-    if (b.textContent.trim() === String(answer)) {
+    const numSpan = b.querySelector('.order-num');
+    if (numSpan && numSpan.textContent.trim() === String(answer)) {
       b.classList.add('correct-pick');
       b.style.pointerEvents = 'none';
     }
@@ -978,14 +1008,16 @@ function handleOrderingAnswer(answer) {
       playWrong();
       speak('顺序不对哦，看看正确答案～', 'zh-CN');
       // 显示正确顺序
-      buttons.forEach(b => b.className = 'game-option btn-big');
-      // 短暂闪烁正确答案
+      const allBtns = document.querySelectorAll('.ordering-btn');
+      allBtns.forEach(b => b.className = 'game-option btn-big ordering-btn');
       setTimeout(() => {
-        buttons.forEach(b => {
-          const idx = correctSeq.indexOf(b.textContent.trim());
+        allBtns.forEach(b => {
+          const numSpan = b.querySelector('.order-num');
+          const num = numSpan ? numSpan.textContent.trim() : '';
+          const idx = correctSeq.indexOf(num);
           if (idx >= 0) {
             b.classList.add('correct-pick');
-            b.textContent = `${idx + 1}. ${b.textContent.trim()}`;
+            numSpan.textContent = `${idx + 1}. ${num}`;
           }
         });
       }, 300);
